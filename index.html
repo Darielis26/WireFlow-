@@ -45,9 +45,9 @@ function localDT(){let d=new Date(),z=n=>String(n).padStart(2,'0');return d.getF
 function sec(t){let a=String(t).split(':').map(Number);return (a[0]||0)*3600+(a[1]||0)*60+(a[2]||0)}
 function span(a,b){let x=sec(a),y=sec(b);if(y<x)y+=86400;return (y-x)/60}
 function hm(n){n=Math.max(0,Number(n)||0);let s=Math.floor(n*60),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),q=s%60;return h+'h '+String(m).padStart(2,'0')+'min '+String(q).padStart(2,'0')+'seg'}
-function fmt(x){let[y,m,d]=x.split('-');return m+'/'+d+'/'+y}function dj(){return jobs.filter(j=>j.date===date.value)}function sm(){localStorage.setItem(JK,JSON.stringify(jobs))}
+function fmt(x){let[y,m,d]=x.split('-');return m+'/'+d+'/'+y}function dj(){let d=document.getElementById('date');return jobs.filter(j=>j.date===(d?d.value:today()))}function sm(){localStorage.setItem(JK,JSON.stringify(jobs))}
 function meta(){return metas[date.value]||(metas[date.value]={amP:0,amC:0,obs:''})}function saveMeta(){let m=meta();m.amP=+amP.value||0;m.amC=+amC.value||0;m.obs=shiftObs.value;localStorage.setItem(MK,JSON.stringify(metas))}
-function active(m){return dj().find(j=>j.machine==m&&!j.end)}
+function active(m){return dj().find(j=>Number(j.machine)===Number(m)&&!j.end)}
 function pauseTotal(j){return (j.pauses||[]).reduce((s,p)=>s+(p.end?span(p.start,p.end):span(p.start,now())),0)}
 function effective(j){return Math.max(0,span(j.start,j.end||now())-pauseTotal(j)-breakDeduct(j))}
 function addJob(m,startTime,startDate){
@@ -60,9 +60,9 @@ function addJob(m,startTime,startDate){
  let kind=document.getElementById('kind'+m)?.value||'Primary';
  let origin=document.getElementById('origin'+m)?.value||'PM';
  jobs.push({id:Date.now()+m,date:startDate||date.value,machine:m,lot,kind,origin,start:startTime,end:null,pauses:[],breaks:{},notes:''});
- sm(); if(startDate&&date.value!==startDate)date.value=startDate; load();
+ sm(); if(startDate&&document.getElementById('date').value!==startDate)document.getElementById('date').value=startDate; load();
 }
-function start(m){addJob(m,now(),date.value)}
+function start(m){addJob(m,now(),document.getElementById('date').value)}
 function manualStart(m){let v=document.getElementById('manual'+m).value;if(!v){alert('Selecciona la fecha y hora real de inicio.');return}let d=new Date(v);if(isNaN(d.getTime())){alert('Fecha u hora no válida.');return}if(d.getTime()>Date.now()){alert('La hora de inicio no puede estar en el futuro.');return}let z=n=>String(n).padStart(2,'0'),sd=d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()),st=z(d.getHours())+':'+z(d.getMinutes())+':00';addJob(m,st,sd)}
 function delJob(id){let j=jobs.find(x=>String(x.id)===String(id));if(!j)return;if(!confirm('¿Eliminar este registro de '+j.lot+' · M'+j.machine+' · '+j.kind+'?'))return;jobs=jobs.filter(x=>String(x.id)!==String(id));sm();render()}
 function showTime(t){return String(t||'')}
@@ -76,6 +76,7 @@ function breakControls(j){return BREAKS.map(b=>`<div class="notice"><b>Break ${b
 function checkBreakAlerts(){let d=new Date(),key=today()+'-'+d.getHours()+':'+d.getMinutes();BREAKS.forEach(b=>{let [h,m]=b.start.split(':').map(Number);if(d.getHours()===h&&d.getMinutes()===m){[3,4,5].forEach(mac=>{let j=active(mac);if(j&&!((j.breaks||{})[b.id])){let k='wf_alert_'+j.id+'_'+b.id;if(sessionStorage.getItem(k)!==key){sessionStorage.setItem(k,key);if('Notification'in window&&Notification.permission==='granted')new Notification('WireFlow · Break '+b.label,{body:'M'+mac+': indica si la máquina se detuvo para descontar '+b.mins+' min.'});setTimeout(()=>askBreak(j,b),50)}}})}})}
 function enableNotifications(){if(!('Notification'in window)){alert('Este navegador no admite notificaciones. WireFlow seguirá mostrando el aviso dentro de la página.');return}Notification.requestPermission().then(p=>alert(p==='granted'?'Notificaciones activadas. Mantén WireFlow abierto para recibir los avisos de break.':'No se activaron las notificaciones. WireFlow seguirá mostrando los avisos dentro de la página.'))}
 
+function openPause(j){return (j.pauses||[]).find(p=>!p.end)}
 function pause(m){let j=active(m);if(!j)return;if((j.pauses||[]).some(p=>!p.end)){alert('M'+m+' ya está pausada.');return}let reason=document.getElementById('reason'+m).value;j.pauses.push({start:now(),end:null,reason});sm();render()}
 function resume(m){let j=active(m);if(!j)return;let p=[...(j.pauses||[])].reverse().find(p=>!p.end);if(!p){alert('No hay una pausa activa.');return}p.end=now();sm();render()}
 function finish(m){let j=active(m);if(!j)return;let p=[...(j.pauses||[])].reverse().find(p=>!p.end);if(p){if(!confirm('La máquina está pausada. ¿Finalizar y cerrar la pausa ahora?'))return;p.end=now()}j.end=now();sm();render()}
@@ -104,13 +105,29 @@ function tickTimers(){
   if(info)info.innerHTML='Cronómetro total (continúa corriendo) · Break descontado: '+hm(breakDeduct(j))+' · Otras pausas: '+hm(pauseTotal(j))+' · <b>Efectivo: '+hm(effective(j))+'</b>';
  });
 }
-function render(){machines.innerHTML=[3,4,5].map(machineCard).join('');let s=stats();pN.textContent=s.p;cN.textContent=s.c;pairN.textContent=s.pairs;machineN.textContent=s.machines;sharedN.textContent=s.shared;
- let done=dj().filter(j=>j.end);rows.innerHTML=done.map(j=>`<tr><td>${j.lot}</td><td>M${j.machine}</td><td>${j.kind}</td><td>${showTime(j.start)}</td><td>${showTime(j.end)}</td><td>${hm(breakDeduct(j))}</td><td>${hm(pauseTotal(j))}</td><td><b>${hm(effective(j))}</b></td><td>${support(j.kind)?'Apoyo':j.origin==='AM/PM'?'Compartido':'PM'}</td><td><button class="red" style="width:auto;padding:7px 9px;margin:0" onclick="delJob('${j.id}')">🗑 ELIMINAR</button></td></tr>`).join('')||'<tr><td colspan="10">Sin producción terminada. El botón 🗑 ELIMINAR aparecerá cuando finalices un registro.</td></tr>'}
+function render(){
+ let box=document.getElementById('machines');
+ if(box) box.innerHTML=[3,4,5].map(machineCard).join('');
+ let s=stats();
+ document.getElementById('pN').textContent=s.p;
+ document.getElementById('cN').textContent=s.c;
+ document.getElementById('pairN').textContent=s.pairs;
+ document.getElementById('machineN').textContent=s.machines;
+ document.getElementById('sharedN').textContent=s.shared;
+ let done=dj().filter(j=>j.end);document.getElementById('rows').innerHTML=done.map(j=>`<tr><td>${j.lot}</td><td>M${j.machine}</td><td>${j.kind}</td><td>${showTime(j.start)}</td><td>${showTime(j.end)}</td><td>${hm(breakDeduct(j))}</td><td>${hm(pauseTotal(j))}</td><td><b>${hm(effective(j))}</b></td><td>${support(j.kind)?'Apoyo':j.origin==='AM/PM'?'Compartido':'PM'}</td><td><button class="red" style="width:auto;padding:7px 9px;margin:0" onclick="delJob('${j.id}')">🗑 ELIMINAR</button></td></tr>`).join('')||'<tr><td colspan="10">Sin producción terminada. El botón 🗑 ELIMINAR aparecerá cuando finalices un registro.</td></tr>'}
 
-function load(){let m=meta();amP.value=m.amP;amC.value=m.amC;shiftObs.value=m.obs;render()}
+function load(){
+ let m=meta();
+ document.getElementById('amP').value=m.amP;
+ document.getElementById('amC').value=m.amC;
+ document.getElementById('shiftObs').value=m.obs;
+ render();
+}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function pdfEnglish(){let d=dj().filter(j=>j.end),s=stats(),m=meta();let rows=d.map(j=>`<tr><td>${esc(j.lot)}</td><td>M${j.machine}</td><td>${support(j.kind)?'Support '+(j.kind.includes('Primary')?'Primary':'Catcher'):j.kind}</td><td>${j.start}</td><td>${j.end}</td><td>${hm(breakDeduct(j))}</td><td>${hm(pauseTotal(j))}</td><td>${hm(effective(j))}</td><td>${support(j.kind)?'Support':j.origin==='AM/PM'?'Shared AM/PM':'PM'}</td><td>${esc(j.notes||'—')}</td></tr>`).join('');
  let w=window.open('','_blank');w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Roof 8 AWG PM Report</title><style>body{font-family:Arial;margin:28px;font-size:11px;color:#17212b}h1{font-size:20px}.k{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.b{border:1px solid #bbb;padding:9px;text-align:center}.b strong{display:block;font-size:18px}table{width:100%;border-collapse:collapse;margin-top:15px}th,td{border:1px solid #bbb;padding:5px}th{background:#eee}.sec{font-size:14px;font-weight:bold;margin-top:16px}@media print{button{display:none}}</style></head><body><h1>ROOF 8 AWG — PM DAILY PRODUCTION REPORT</h1><p>Date: ${fmt(date.value)} · PM Shift: 3:00 PM–12:00 AM · Machines 3, 4 & 5</p><div class="k"><div class="b"><strong>${s.p}</strong>Primary</div><div class="b"><strong>${s.c}</strong>Catcher</div><div class="b"><strong>${s.pairs}</strong>Pairs</div><div class="b"><strong>${s.machines}</strong>Equivalent Machines</div><div class="b"><strong>${s.shared}</strong>Shared Pairs</div></div><div class="sec">Production Detail</div><table><thead><tr><th>Lot</th><th>Machine</th><th>Work</th><th>Start</th><th>Finish</th><th>Break</th><th>Other Downtime</th><th>Effective</th><th>Class</th><th>Observations</th></tr></thead><tbody>${rows||'<tr><td colspan="10">No completed production recorded.</td></tr>'}</tbody></table><div class="sec">Shift Observations</div><p>${esc(m.obs||'—')}</p><button onclick="window.print()">Print / Save PDF</button></body></html>`);w.document.close()}
 function backup(){let blob=new Blob([JSON.stringify({jobs,metas},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='roof8_backup_'+date.value+'.json';a.click()}
-setInterval(()=>{tickTimers();checkBreakAlerts()},1000);date.value=today();load();
+document.getElementById('date').value=today();
+load();
+setInterval(()=>{tickTimers();checkBreakAlerts()},1000);
 </script></main></body></html>
