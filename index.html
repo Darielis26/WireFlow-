@@ -50,9 +50,20 @@ function meta(){return metas[date.value]||(metas[date.value]={amP:0,amC:0,obs:''
 function active(m){return dj().find(j=>j.machine==m&&!j.end)}
 function pauseTotal(j){return (j.pauses||[]).reduce((s,p)=>s+(p.end?span(p.start,p.end):span(p.start,now())),0)}
 function effective(j){return Math.max(0,span(j.start,j.end||now())-pauseTotal(j)-breakDeduct(j))}
-function addJob(m,startTime,startDate){if(active(m)){alert('M'+m+' ya tiene un trabajo activo.');return}let lot=document.getElementById('lot'+m).value.trim(),kind=document.getElementById('kind'+m).value,origin=document.getElementById('origin'+m).value;if(!lot){alert('Escribe el lote de M'+m+'.');return}jobs.push({id:Date.now()+m,date:startDate||date.value,machine:m,lot,kind,origin,start:startTime,end:null,pauses:[],breaks:{},notes:''});sm();if(startDate&&date.value!==startDate)date.value=startDate;load()}
+function addJob(m,startTime,startDate){
+ let old=active(m);
+ if(old){
+   if(!confirm('M'+m+' tiene un cronómetro anterior abierto.\n\nAceptar = borrar SOLO ese cronómetro abierto y comenzar M'+m+' ahora.\nCancelar = dejarlo como está.'))return;
+   jobs=jobs.filter(x=>String(x.id)!==String(old.id)); sm();
+ }
+ let lot=(document.getElementById('lot'+m)?.value||'').trim()||'SIN LOTE';
+ let kind=document.getElementById('kind'+m)?.value||'Primary';
+ let origin=document.getElementById('origin'+m)?.value||'PM';
+ jobs.push({id:Date.now()+m,date:startDate||date.value,machine:m,lot,kind,origin,start:startTime,end:null,pauses:[],breaks:{},notes:''});
+ sm(); if(startDate&&date.value!==startDate)date.value=startDate; load();
+}
 function start(m){addJob(m,now(),date.value)}
-function manualStart(m){if(active(m)){alert('M'+m+' ya tiene un trabajo activo.');return}let v=document.getElementById('manual'+m).value;if(!v){alert('Selecciona la fecha y hora real de inicio.');return}let d=new Date(v);if(isNaN(d.getTime())){alert('Fecha u hora no válida.');return}if(d.getTime()>Date.now()){alert('La hora de inicio no puede estar en el futuro.');return}let z=n=>String(n).padStart(2,'0'),sd=d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()),st=z(d.getHours())+':'+z(d.getMinutes())+':00';addJob(m,st,sd)}
+function manualStart(m){let v=document.getElementById('manual'+m).value;if(!v){alert('Selecciona la fecha y hora real de inicio.');return}let d=new Date(v);if(isNaN(d.getTime())){alert('Fecha u hora no válida.');return}if(d.getTime()>Date.now()){alert('La hora de inicio no puede estar en el futuro.');return}let z=n=>String(n).padStart(2,'0'),sd=d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()),st=z(d.getHours())+':'+z(d.getMinutes())+':00';addJob(m,st,sd)}
 function delJob(id){let j=jobs.find(x=>String(x.id)===String(id));if(!j)return;if(!confirm('¿Eliminar este registro de '+j.lot+' · M'+j.machine+' · '+j.kind+'?'))return;jobs=jobs.filter(x=>String(x.id)!==String(id));sm();render()}
 function showTime(t){return String(t||'')}
 const BREAKS=[{id:'b1715',start:'17:15:00',end:'17:30:00',label:'5:15 PM',mins:15},{id:'b1900',start:'19:00:00',end:'19:30:00',label:'7:00 PM',mins:30},{id:'b2115',start:'21:15:00',end:'21:30:00',label:'9:15 PM',mins:15}];
